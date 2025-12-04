@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual environment
+venv/
+env/
+
+# FastAPI / Uvicorn cache
+*.sqlite3
+*.db
+
+# Environment / sensitive data
+.env
+*.env
+
+# IDE specific
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+
+# Local development-only files
+utils/
+scratch/
+temp/
+notes/
