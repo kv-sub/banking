@@ -1,19 +1,27 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
+from datetime import datetime
+import re
 
-class LoanApplicationIn(BaseModel):
+
+class LoanApplicationCreate(BaseModel):
     name: str = Field(..., example="John Doe")
-    age: int = Field(..., ge=18, le=100, example=30)
-    income: float = Field(..., gt=0, example=45000)
-    loan_amount: float = Field(..., gt=0, example=200000)
-    pan: str = Field(..., min_length=10, max_length=10, example="ABCDE1234F")
+    age: int = Field(..., gt=18, lt=100, example=30)
+    income: float = Field(..., gt=0, example=45000.0)
+    loan_amount: float = Field(..., gt=0, example=200000.0)
+    pan: str = Field(..., example="ABCDE1234F")
 
-class LoanApplicationOut(BaseModel):
+    @validator("pan")
+    def validate_pan(cls, v):
+        pattern = r"^[A-Z]{5}[0-9]{4}[A-Z]$"
+        if not re.match(pattern, v.upper()):
+            raise ValueError("Invalid PAN format")
+        return v.upper()
+
+
+class LoanApplicationOut(LoanApplicationCreate):
     application_id: str
-    name: str
-    age: int
-    income: float
-    loan_amount: float
-    pan: str
     status: str
-    credit_score: int
-    created_at: str
+    credit_score: int | None
+    risk_level: str | None
+    decision_reason: str
+    created_at: datetime

@@ -1,0 +1,90 @@
+# agent_tools.py
+from pydantic import BaseModel
+from utils import get_credit_score
+
+
+# -----------------------------
+# 1. VALIDATION TOOL
+# -----------------------------
+class ValidateInputResult(BaseModel):
+    success: bool
+    message: str
+
+
+def validate_input_tool(name: str, age: int, income: float, loan_amount: float, pan: str):
+    if age < 18 or age > 100:
+        return ValidateInputResult(success=False, message="Age out of allowed range").dict()
+
+    if income <= 0:
+        return ValidateInputResult(success=False, message="Income must be greater than zero").dict()
+
+    if loan_amount <= 0:
+        return ValidateInputResult(success=False, message="Loan amount must be greater than zero").dict()
+
+    if loan_amount > income * 10:
+        return ValidateInputResult(success=False, message="Loan amount extremely high relative to income").dict()
+
+    return ValidateInputResult(success=True, message="Input looks valid").dict()
+
+
+# -----------------------------
+# 2. CREDIT SCORE TOOL
+# -----------------------------
+class CreditScoreResult(BaseModel):
+    credit_score: int
+
+
+def credit_score_tool(pan: str):
+    score = get_credit_score(pan)
+    return CreditScoreResult(credit_score=score).dict()
+
+
+# -----------------------------
+# 3. RISK RULES TOOL
+# -----------------------------
+class RiskResult(BaseModel):
+    risk_level: str
+    reason: str
+
+
+def risk_rules_tool(income: float, loan_amount: float, credit_score: int):
+    # Rule 1 — credit score
+    if credit_score < 600:
+        return RiskResult(risk_level="high", reason="Very low credit score").dict()
+
+    # Rule 2 — debt-to-income ratio
+    if loan_amount > income * 5:
+        return RiskResult(risk_level="high", reason="Loan amount too high relative to income").dict()
+
+    if loan_amount > income * 3:
+        return RiskResult(risk_level="medium", reason="Moderate risk loan amount").dict()
+
+    return RiskResult(risk_level="low", reason="Healthy income-to-loan ratio").dict()
+
+
+# -----------------------------
+# 4. DECISION TOOL
+# -----------------------------
+class DecisionResult(BaseModel):
+    approved: bool
+    reason: str
+
+
+def decision_tool(credit_score: int, risk_level: str):
+    # very basic but very understandable STP logic
+    if credit_score < 630:
+        return DecisionResult(
+            approved=False,
+            reason="Credit score below eligibility threshold"
+        ).dict()
+
+    if risk_level == "high":
+        return DecisionResult(
+            approved=False,
+            reason="Risk is too high for approval"
+        ).dict()
+
+    return DecisionResult(
+        approved=True,
+        reason="Good credit score and acceptable risk"
+    ).dict()
