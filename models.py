@@ -1,7 +1,7 @@
+# models.py
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 import re
-
 
 class LoanApplicationCreate(BaseModel):
     name: str = Field(..., example="John Doe")
@@ -17,11 +17,11 @@ class LoanApplicationCreate(BaseModel):
             raise ValueError("Invalid PAN format")
         return v.upper()
 
-
 class LoanApplicationOut(LoanApplicationCreate):
     application_id: str
     status: str
     credit_score: int | None
     risk_level: str | None
-    decision_reason: str
+    decision_reason: str | None
+    llm_explanation: str | None = None
     created_at: datetime
