@@ -1,3 +1,4 @@
+# llm_service.py
 import os
 import requests
 import json
@@ -11,36 +12,40 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
 OLLAMA_URL = f"{OLLAMA_BASE}/api/generate"
 
 
-def _stream_ollama(prompt: str) -> str:
-    """
-    Robust streaming handler for Ollama.
-    Works with both streaming and non-streaming models.
-    Never fails on partial JSON chunks.
-    Never raises timeout issues.
-    """
+def _parse_stream(text: str) -> str:
+    """Handles both streaming and non-streaming JSON safely."""
+    lines = text.strip().split("\n")
+    out = []
+    for line in lines:
+        try:
+            obj = json.loads(line)
+            if "response" in obj:
+                out.append(obj["response"])
+        except:
+            continue
+    return "".join(out).strip()
+
+
+def ask_llm(prompt: str) -> str:
+    """Non-blocking request to Ollama, no timeout."""
     try:
-        response = requests.post(
+        resp = requests.post(
             OLLAMA_URL,
             json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": True},
             stream=True,
-            timeout=None  # Critical: allow streaming without timeout
+            timeout=None
         )
-
-        final_text = []
-
-        for line in response.iter_lines():
+        final = []
+        for line in resp.iter_lines():
             if not line:
                 continue
-
             try:
-                obj = json.loads(line.decode("utf-8"))
-                if "response" in obj:
-                    final_text.append(obj["response"])
+                j = json.loads(line.decode())
+                if "response" in j:
+                    final.append(j["response"])
             except:
-                # Ignore malformed lines safely
                 continue
-
-        return "".join(final_text).strip()
+        return "".join(final).strip()
 
     except Exception as e:
         return f"(LLM unavailable: {e})"
@@ -57,29 +62,35 @@ Income: {application.get('income')}
 Loan Amount: {application.get('loan_amount')}
 
 Results:
-Credit score: {agent_result['credit_score']['credit_score']}
-Risk level: {agent_result['risk']['risk_level']}
-Decision: {"approved" if agent_result['decision']['approved'] else "rejected"}
-Reason: {agent_result['decision']['reason']}
+Credit score: {agent_result['credit_score']}
+Risk level: {agent_result['risk_level']}
+Decision: {application['status']}
+Reason: {application['decision_reason']}
 """
-
-    return _stream_ollama(prompt)
+    return ask_llm(prompt)
 
 
 def generate_status_explanation(application: dict, history: list) -> str:
     timeline = "\n".join(
-        [f"- {h['old_status']} → {h['new_status']} at {h['changed_at']}" for h in history]
+        f"- {h['old_status']} → {h['new_status']} at {h['changed_at']}"
+        for h in history
     )
-
     prompt = f"""
-Explain to the customer how their loan application progressed.
+Explain this loan application's status timeline:
 
 Application ID: {application['application_id']}
 
 Timeline:
 {timeline}
 
-Write a short, friendly summary.
+Provide a simple, friendly summary.
 """
+    return ask_llm(prompt)
 
-    return _stream_ollama(prompt)
+
+def generate_full_explanation(application: dict, agent_result: dict, history: list):
+    """Used by new API endpoint."""
+    return {
+        "llm_explanation": generate_llm_explanation(application, agent_result),
+        "llm_status_explanation": generate_status_explanation(application, history)
+    }

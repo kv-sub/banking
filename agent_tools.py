@@ -32,7 +32,7 @@ class RiskResult(BaseModel):
     reason: str
 
 def risk_rules_tool(income: float, loan_amount: float, credit_score: int):
-    if credit_score < 600:
+    if credit_score < 550:
         return RiskResult(risk_level="high", reason="Very low credit score").dict()
     if loan_amount > income * 5:
         return RiskResult(risk_level="high", reason="Loan amount too high relative to income").dict()
@@ -44,10 +44,27 @@ def risk_rules_tool(income: float, loan_amount: float, credit_score: int):
 class DecisionResult(BaseModel):
     approved: bool
     reason: str
+    manual_review: bool = False  # NEW FLAG
 
 def decision_tool(credit_score: int, risk_level: str):
-    if credit_score < 630:
-        return DecisionResult(approved=False, reason="Credit score below eligibility threshold").dict()
+    # 🚨 Manual review triggers
+    if credit_score < 600:
+        return DecisionResult(approved=False, manual_review=True,
+               reason="Low credit score requires manual verification").dict()
+
     if risk_level == "high":
-        return DecisionResult(approved=False, reason="Risk is too high for approval").dict()
+        return DecisionResult(approved=False, manual_review=True,
+               reason="High-risk profile requires manual review").dict()
+
+    # Auto reject (no manual review)
+    if credit_score < 630:
+        return DecisionResult(approved=False,
+               reason="Credit score below eligibility threshold").dict()
+
+    # Auto reject for high risk
+    if risk_level == "high":
+        return DecisionResult(approved=False,
+               reason="Risk too high for approval").dict()
+
+    # Auto approve
     return DecisionResult(approved=True, reason="Good credit score and acceptable risk").dict()

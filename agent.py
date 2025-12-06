@@ -9,9 +9,10 @@ from llm_service import generate_llm_explanation
 
 def run_agent(application: dict, use_llm: bool = False):
     """
-    Orchestrator for STP loan application.
-    Executes all tools in order and returns full result.
+    Runs validation → credit score → risk rules → decision.
+    Now supports MANUAL REVIEW.
     """
+
     result = {}
 
     # 1️⃣ Validation
@@ -25,10 +26,10 @@ def run_agent(application: dict, use_llm: bool = False):
     result["validation"] = validation
 
     if not validation["success"]:
+        result["status"] = "rejected"
         result["credit_score"] = None
         result["risk"] = None
         result["decision"] = {"approved": False, "reason": validation["message"]}
-        result["status"] = "rejected"
         return result
 
     # 2️⃣ Credit Score
@@ -39,21 +40,24 @@ def run_agent(application: dict, use_llm: bool = False):
     risk = risk_rules_tool(
         income=application["income"],
         loan_amount=application["loan_amount"],
-        credit_score=credit_score["credit_score"]
+        credit_score=credit_score["credit_score"],
     )
     result["risk"] = risk
 
     # 4️⃣ Decision
     decision = decision_tool(
         credit_score=credit_score["credit_score"],
-        risk_level=risk["risk_level"]
+        risk_level=risk["risk_level"],
     )
     result["decision"] = decision
 
-    # 5️⃣ Determine application status
-    result["status"] = "approved" if decision["approved"] else "rejected"
+    # 5️⃣ Status determination
+    if decision.get("manual_review"):
+        result["status"] = "manual_review"
+    else:
+        result["status"] = "approved" if decision["approved"] else "rejected"
 
-    # 6️⃣ Optional LLM explanation
+    # 6️⃣ LLM explanation (optional)
     if use_llm:
         result["llm_explanation"] = generate_llm_explanation(application, result)
 
