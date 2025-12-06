@@ -27,6 +27,7 @@ def init_db():
     conn = get_connection()
     cur = conn.cursor()
 
+    # MAIN TABLE
     cur.execute("""
         CREATE TABLE IF NOT EXISTS loan_applications (
             application_id TEXT PRIMARY KEY,
@@ -40,23 +41,58 @@ def init_db():
             risk_level TEXT,
             decision_reason TEXT,
             llm_explanation TEXT,
+            llm_status_explanation TEXT,
             created_at TIMESTAMP NOT NULL
         );
     """)
 
-    # Index for PAN lookups
+    # Status history table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS loan_status_history (
+            id SERIAL PRIMARY KEY,
+            application_id TEXT NOT NULL,
+            old_status TEXT,
+            new_status TEXT NOT NULL,
+            changed_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+    """)
+
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pan ON loan_applications (pan);")
 
-    # Partial unique index: block duplicate active applications while in 'submitted' or 'processing'
-    # Postgres supports partial indexes
+    # Partial unique index for active PAN
     cur.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS unique_active_pan
         ON loan_applications (pan)
-        WHERE status IN ('submitted','processing');
+        WHERE status IN ('submitted','processing','manual_review');
     """)
 
     conn.commit()
     conn.close()
+
+
+def log_status_change(application_id: str, old_status: str | None, new_status: str):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO loan_status_history (application_id, old_status, new_status)
+        VALUES (%s, %s, %s)
+    """, (application_id, old_status, new_status))
+    conn.commit()
+    conn.close()
+
+
+def get_status_history(application_id: str):
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+        SELECT old_status, new_status, changed_at
+        FROM loan_status_history
+        WHERE application_id = %s
+        ORDER BY changed_at ASC
+    """, (application_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return rows
 
 
 def check_active_application(pan: str) -> bool:
@@ -64,7 +100,7 @@ def check_active_application(pan: str) -> bool:
     cur = conn.cursor()
     cur.execute("""
         SELECT application_id FROM loan_applications
-        WHERE pan = %s AND status IN ('submitted','processing')
+        WHERE pan = %s AND status IN ('submitted','processing','manual_review')
         LIMIT 1
     """, (pan,))
     r = cur.fetchone()
@@ -73,45 +109,18 @@ def check_active_application(pan: str) -> bool:
 
 
 def insert_application(app: dict):
-    """
-    Insert a complete application record.
-    app should contain all necessary keys:
-      application_id, name, age, income, loan_amount, pan, status,
-      credit_score, risk_level, decision_reason, created_at, (optional) llm_explanation
-    """
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # Prevent duplicate active applications per PAN (double check)
-        cur.execute("""
-            SELECT application_id FROM loan_applications
-            WHERE pan = %s AND status IN ('submitted','processing')
-            LIMIT 1
-        """, (app['pan'],))
-        existing = cur.fetchone()
-        if existing:
-            raise Exception(f"Active application already exists for PAN {app['pan']}")
-
         cur.execute("""
             INSERT INTO loan_applications
             (application_id, name, age, income, loan_amount, pan, status,
-             credit_score, risk_level, decision_reason, llm_explanation, created_at)
+             credit_score, risk_level, decision_reason, llm_explanation,
+             llm_status_explanation, created_at)
             VALUES (%(application_id)s, %(name)s, %(age)s, %(income)s, %(loan_amount)s,
-                    %(pan)s, %(status)s, %(credit_score)s, %(risk_level)s, %(decision_reason)s, %(llm_explanation)s, %(created_at)s)
-        """, {
-            "application_id": app["application_id"],
-            "name": app["name"],
-            "age": app["age"],
-            "income": app["income"],
-            "loan_amount": app["loan_amount"],
-            "pan": app["pan"],
-            "status": app["status"],
-            "credit_score": app.get("credit_score"),
-            "risk_level": app.get("risk_level"),
-            "decision_reason": app.get("decision_reason"),
-            "llm_explanation": app.get("llm_explanation"),
-            "created_at": app["created_at"],
-        })
+                    %(pan)s, %(status)s, %(credit_score)s, %(risk_level)s, %(decision_reason)s,
+                    %(llm_explanation)s, %(llm_status_explanation)s, %(created_at)s)
+        """, app)
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -130,20 +139,3 @@ def get_application(application_id: str):
     row = cur.fetchone()
     conn.close()
     return row
-
-
-def update_application(application_id: str, updates: dict):
-    """
-    updates: dict of column -> value to update
-    """
-    if not updates:
-        return
-    conn = get_connection()
-    cur = conn.cursor()
-    set_clause = ", ".join([f"{k} = %s" for k in updates.keys()])
-    values = list(updates.values())
-    values.append(application_id)
-    sql = f"UPDATE loan_applications SET {set_clause} WHERE application_id = %s"
-    cur.execute(sql, values)
-    conn.commit()
-    conn.close()
