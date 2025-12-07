@@ -1,54 +1,33 @@
-# llm_service.py
+# llm_service.py (Groq-powered)
 import os
-import requests
-import json
+from groq import Groq
 from dotenv import load_dotenv
 
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
 
-OLLAMA_BASE = os.getenv("OLLAMA_BASE")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
-OLLAMA_URL = f"{OLLAMA_BASE}/api/generate"
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 
 # ============================================================
-# INTERNAL STREAM HANDLER
+# GROQ LLM CALL
 # ============================================================
-def _stream_ollama(prompt: str) -> str:
-    """
-    Safe streaming function for Ollama.
-    Handles malformed chunks, partial JSON, or non-streaming fallback.
-    """
+def _generate(prompt: str) -> str:
     try:
-        resp = requests.post(
-            OLLAMA_URL,
-            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": True},
-            stream=True,
-            timeout=None,
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
         )
-
-        collected = []
-
-        for line in resp.iter_lines():
-            if not line:
-                continue
-
-            try:
-                obj = json.loads(line.decode("utf-8"))
-                if "response" in obj:
-                    collected.append(obj["response"])
-            except:
-                continue
-
-        return "".join(collected).strip()
+        return response.choices[0].message.content.strip()
 
     except Exception as e:
         return f"(LLM unavailable: {e})"
 
 
 # ============================================================
-# OLD FUNCTION (still used by initial agent)
+# OLD FUNCTION (still used by agent)
 # ============================================================
 def generate_llm_explanation(application: dict, agent_result: dict) -> str:
     prompt = f"""
@@ -66,7 +45,7 @@ Risk level: {agent_result['risk']['risk_level']}
 Decision: {"approved" if agent_result['decision']['approved'] else "rejected"}
 Reason: {agent_result['decision']['reason']}
 """
-    return _stream_ollama(prompt)
+    return _generate(prompt)
 
 
 # ============================================================
@@ -88,7 +67,7 @@ Timeline:
 
 Write a short, friendly explanation for the customer.
 """
-    return _stream_ollama(prompt)
+    return _generate(prompt)
 
 
 # ============================================================
@@ -122,11 +101,11 @@ Timeline:
 Write a clear and structured explanation suitable for the customer.
 """
 
-    return {"llm_explanation": _stream_ollama(prompt)}
+    return {"llm_explanation": _generate(prompt)}
 
 
 # ============================================================
-# CHAT WITH CUSTOMER ABOUT THEIR LOAN
+# CUSTOMER CHAT
 # ============================================================
 def generate_chat_response(app, history, message):
     timeline = "".join(
@@ -135,7 +114,7 @@ def generate_chat_response(app, history, message):
     )
 
     prompt = f"""
-You are a helpful loan assistant AI. Answer the customer's question politely.
+You are a helpful loan assistant AI.
 
 Customer question:
 "{message}"
@@ -153,6 +132,7 @@ Application details:
 Full Timeline:
 {timeline}
 
-Respond clearly and supportively.
+Respond politely and clearly.
 """
-    return {"response": _stream_ollama(prompt)}
+
+    return {"response": _generate(prompt)}

@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 import os
 from models import LoanApplicationCreate, LoanApplicationOut, ManualReviewRequest, ChatRequest
 from services import generate_application_data
+from fastapi.middleware.cors import CORSMiddleware
 from db_postgres import (
     init_db,
     insert_application,
@@ -20,6 +21,14 @@ dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
 
 app = FastAPI(title="Bank Loan STP API with GenAI")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],            # Allow all frontend origins
+    allow_credentials=True,
+    allow_methods=["*"],            # GET, POST, PUT, DELETE, OPTIONS
+    allow_headers=["*"],            # All headers
+)
 
 init_db()
 
