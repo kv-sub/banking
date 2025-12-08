@@ -19,11 +19,18 @@ def _generate(prompt: str) -> str:
             model=MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
+            max_tokens=300,
         )
-        return response.choices[0].message.content.strip()
+
+        # FOR YOUR SDK → message.content is an attribute, not a dict
+        content = response.choices[0].message.content
+
+        return content.strip() if isinstance(content, str) else str(content)
 
     except Exception as e:
+        print("🔥 LLM ERROR:", e)
         return f"(LLM unavailable: {e})"
+
 
 
 # ============================================================

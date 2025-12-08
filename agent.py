@@ -33,7 +33,12 @@ def run_agent(application: dict, use_llm: bool = False):
         return result
 
     # 2️⃣ Credit Score
-    credit_score = credit_score_tool(application["pan"])
+    credit_score = credit_score_tool(
+    application["pan"],
+    application["income"],
+    application["loan_amount"]
+)
+
     result["credit_score"] = credit_score
 
     # 3️⃣ Risk Assessment

@@ -1,6 +1,6 @@
 # agent_tools.py
 from pydantic import BaseModel
-from utils import get_credit_score
+from utils import get_or_update_credit_score
 
 # 1. Validation
 class ValidateInputResult(BaseModel):
@@ -22,8 +22,12 @@ def validate_input_tool(name: str, age: int, income: float, loan_amount: float, 
 class CreditScoreResult(BaseModel):
     credit_score: int
 
-def credit_score_tool(pan: str):
-    score = get_credit_score(pan)
+def credit_score_tool(pan: str, income: float, loan_amount: float):
+    score = get_or_update_credit_score(
+        pan=pan,
+        income=income,
+        loan_amount=loan_amount
+    )
     return CreditScoreResult(credit_score=score).dict()
 
 # 3. Risk rules

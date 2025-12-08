@@ -80,6 +80,19 @@ def init_db():
         );
     """)
 
+    # -----------------------------------
+    # 4. Credit Score Profile Table
+    # -----------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS credit_profile (
+            pan TEXT PRIMARY KEY,
+            credit_score INTEGER NOT NULL,
+            last_updated TIMESTAMP NOT NULL
+        );
+    """)
+
+
+
     # Index for searching PAN
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pan ON loan_applications (pan);")
 
